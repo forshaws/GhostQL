@@ -1,3 +1,5 @@
+<img src="assets/GhostQL-overview.jpg" alt="GhostQL" />
+
 <div align="center">
   <img src="assets/ghostql-logo.svg" alt="GhostQL" width="360" />
 

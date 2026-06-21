@@ -1,7 +1,6 @@
 <img src="assets/GhostQL-overview.jpg" alt="GhostQL" />
 
 <div align="center">
-  <img src="assets/ghostql-logo.svg" alt="GhostQL" width="360" />
 
   <h3>A composable query engine for unstructured data.</h3>
 

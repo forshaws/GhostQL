@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="ghostGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#818CF8" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#C084FC" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="80" fill="url(#bgGrad)"/>
+
+  <!-- Ghost glow -->
+  <path d="M 110,190
+           C 110,100 290,100 290,190
+           C 290,250 290,290 290,330
+           L 258,305 L 226,330 L 200,305 L 174,330 L 142,305 L 110,290 Z"
+        fill="#38BDF8" filter="blur(20px)" opacity="0.3"/>
+
+  <!-- Ghost body -->
+  <path d="M 110,190
+           C 110,95 290,95 290,190
+           C 290,255 290,295 290,345
+           Q 258,318 232,345
+           Q 216,318 200,345
+           Q 184,318 168,345
+           Q 142,318 110,345
+           C 110,295 110,255 110,190 Z"
+        fill="url(#ghostGrad)"/>
+
+  <!-- Inner glow -->
+  <path d="M 125,190
+           C 125,115 275,115 275,190
+           C 275,230 275,255 275,280
+           C 200,255 175,255 125,280 Z"
+        fill="url(#glowGrad)" opacity="0.6"/>
+
+  <!-- Left eye -->
+  <rect x="155" y="158" width="32" height="44" rx="16" fill="#0F172A"/>
+  <circle cx="165" cy="168" r="7" fill="#FFFFFF"/>
+
+  <!-- Right eye -->
+  <rect x="213" y="158" width="32" height="44" rx="16" fill="#0F172A"/>
+  <circle cx="223" cy="168" r="7" fill="#FFFFFF"/>
+
+  <!-- Smile -->
+  <path d="M 182,218 Q 200,235 218,218" stroke="#0F172A" stroke-width="5" stroke-linecap="round" fill="none"/>
+</svg>

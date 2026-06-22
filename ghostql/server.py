@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ghostql/server.py
-GhostQL TCP Server v1.0.0
+GhostQL TCP Server v1.1.0
 
 Listens for GhostQL query connections, authenticates clients,
 dispatches queries, and returns JSON results.
@@ -38,7 +38,7 @@ BANNER = r"""
  |  ~~  | | |  _ | '_ \ / _ \/ __| __| | | | |
  |  \/  | | |_| || | | | (_) \__ \ |_| |_| | |___
  | /\/\ |  \____||_| |_|\___/|___/\__|\___\_\____|
-           v1.0.0 · Composable Sequential DB · MIT
+           v1.1.0 · Composable Sequential DB · MIT
 """
 HELP_TEXT = """
 GhostQL Query Language v1.0.0
@@ -57,7 +57,9 @@ Examples:
   SELECT document FROM records WHERE name LIKE 'John Mills pharmacist' WITH PQR FPD
   SELECT document FROM patients JOIN prescriptions ON nhs_number WHERE name='Chen' WITH PQR FPD
   SELECT document, nhs FROM records WHERE nhs='4855805912' AND name='Chen' WITH PQR
-
+  SELECT document FROM records WHERE name='Mills' OR name='Chen' WITH PQR FPD
+  SELECT document FROM records WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes' WITH PQR FPD
+  
 Commands:
   help | ?    Show this text
   ping        Test connector health
@@ -166,7 +168,7 @@ def start(config: GhostQLConfig):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='GhostQL Server v1.0.0')
+    ap = argparse.ArgumentParser(description='GhostQL Server v1.1.0')
     ap.add_argument('--config', '-c', help='Path to ghostql.conf', default=None)
     args = ap.parse_args()
 
@@ -174,7 +176,7 @@ def main():
     setup_logging(config.log_level, config.log_file)
 
     logger.info("=" * 56)
-    logger.info("  GhostQL v1.0.0 — Composable Sequential DB Engine")
+    logger.info("  GhostQL v1.1.0 — Composable Sequential DB Engine")
     logger.info("=" * 56)
 
     start(config)

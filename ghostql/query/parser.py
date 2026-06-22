@@ -5,7 +5,7 @@ GhostQL query language parser.
 Supported syntax:
 
   SELECT <cols> FROM <table>
-    WHERE <field>='<value>' [AND <field>='<value>' ...]
+    WHERE <field>='<value>' [AND <field>='<value>' ...] [OR <field>='<value>' ...]
     [JOIN <table2> ON <field>]
     [WITH PQR [FPD]]
 
@@ -21,19 +21,28 @@ Flags (WITH clause):
              FPD without PQR is silently ignored.
 
 Query types:
-  SELECT … WHERE field='value'   → exact match (one searchDoc per token)
-  SELECT … WHERE field LIKE '…'  → similarity search (multi-token overlap)
-  SELECT … JOIN table2 ON field  → in-memory hash join of two result sets
+  SELECT … WHERE field='value'                    → exact match
+  SELECT … WHERE field='v1' AND field2='v2'       → AND intersection
+  SELECT … WHERE field='v1' OR field='v2'         → OR union
+  SELECT … WHERE f1='v1' AND f2='v2' OR f3='v3'  → mixed (AND binds tighter)
+  SELECT … WHERE field LIKE '…'                   → similarity search
+  SELECT … JOIN table2 ON field                   → in-memory hash join
+
+Operator precedence (matches MySQL standard):
+  AND binds tighter than OR.
+  WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes'
+  = (name='Mills' AND dlbl='Retinal') OR (dlbl='Diabetes')
 
 Examples:
   SELECT document FROM records WHERE name='Mills' WITH PQR FPD
+  SELECT document FROM records WHERE name='Mills' OR name='Chen' WITH PQR FPD
+  SELECT document FROM records WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes' WITH PQR FPD
   SELECT document FROM records WHERE name LIKE 'John Mills pharmacist' WITH PQR FPD
-  SELECT document FROM patients JOIN prescriptions ON nhs_number WITH PQR FPD
-  SELECT document, nhs FROM records WHERE nhs='4855805912' AND name='Chen' WITH PQR
+  SELECT document FROM patients JOIN clinical ON nhs WHERE name='Mills' WITH PQR FPD
 """
 import re
 import logging
-from typing import Dict, Any
+from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,21 +52,56 @@ class ParseError(ValueError):
     pass
 
 
+def _parse_conditions(where_body: str) -> List[Dict[str, str]]:
+    """
+    Parse a WHERE body into a list of OR groups, each group being
+    a dict of AND conditions.
+
+    Operator precedence: AND binds tighter than OR (MySQL standard).
+
+    'name=Mills AND dlbl=Retinal OR dlbl=Diabetes'
+    → [
+        {'name': 'Mills', 'dlbl': 'Retinal'},   # AND group 1
+        {'dlbl': 'Diabetes'},                    # AND group 2
+      ]
+
+    Returns list of condition dicts — one dict per OR group.
+    """
+    or_groups = []
+
+    # Split on OR first (lower precedence)
+    or_parts = re.split(r'\s+OR\s+', where_body, flags=re.IGNORECASE)
+
+    for or_part in or_parts:
+        group: Dict[str, str] = {}
+        # Split each OR group on AND (higher precedence)
+        and_parts = re.split(r'\s+AND\s+', or_part.strip(), flags=re.IGNORECASE)
+        for part in and_parts:
+            kv = re.match(r'(\w+)\s*=\s*[\'"]?([^\'"]+)[\'"]?', part.strip())
+            if kv:
+                group[kv.group(1).strip()] = kv.group(2).strip()
+        if group:
+            or_groups.append(group)
+
+    return or_groups
+
+
 def parse(query: str) -> Dict[str, Any]:
     """
     Parse a GhostQL query string into a structured dict.
 
     Returns:
         {
-          'raw':         str,            # original query
-          'columns':     list[str],      # requested columns
-          'table':       str,            # primary table/namespace
-          'conditions':  dict,           # field → value for WHERE =
-          'like':        dict | None,    # {'field': str, 'text': str} for LIKE
-          'join':        dict | None,    # {'table': str, 'on': str} for JOIN
-          'use_pqr':     bool,
-          'use_fpd':     bool,
-          'mode':        str,            # 'plain' | 'PQR' | 'PQR+FPD'
+          'raw':        str,              # original query
+          'columns':    list[str],        # requested columns
+          'table':      str,              # primary table/namespace
+          'or_groups':  list[dict],       # list of AND condition groups (OR between groups)
+          'conditions': dict,             # first AND group (backward compat)
+          'like':       dict | None,      # {'field': str, 'text': str} for LIKE
+          'join':       dict | None,      # {'table': str, 'on': str} for JOIN
+          'use_pqr':    bool,
+          'use_fpd':    bool,
+          'mode':       str,              # 'plain' | 'PQR' | 'PQR+FPD'
         }
     """
     original = query.strip()
@@ -91,11 +135,11 @@ def parse(query: str) -> Dict[str, Any]:
     join_m = re.search(r'JOIN\s+(\w+)\s+ON\s+(\w+)', query, re.IGNORECASE)
     if join_m:
         join  = {'table': join_m.group(1), 'on': join_m.group(2)}
-        # Remove JOIN clause but preserve WHERE — stitch before+after JOIN together
+        # Remove JOIN clause but preserve WHERE
         query = (query[:join_m.start()] + ' ' + query[join_m.end():]).strip()
 
     # ── WHERE ───────────────────────────────────────────────────────────────
-    conditions: Dict[str, str] = {}
+    or_groups: List[Dict[str, str]] = []
     like: Dict[str, str] | None = None
 
     where_m = re.search(r'WHERE\s+(.+)$', query, re.IGNORECASE)
@@ -111,23 +155,23 @@ def parse(query: str) -> Dict[str, Any]:
         if like_m:
             like = {'field': like_m.group(1), 'text': like_m.group(2)}
         else:
-            # Standard AND-joined equality conditions
-            for part in re.split(r'\s+AND\s+', where_body, flags=re.IGNORECASE):
-                kv = re.match(r'(\w+)\s*=\s*[\'"]?([^\'"]+)[\'"]?', part.strip())
-                if kv:
-                    conditions[kv.group(1).strip()] = kv.group(2).strip()
+            or_groups = _parse_conditions(where_body)
+
+    # Backward compat — first AND group as 'conditions'
+    conditions = or_groups[0] if or_groups else {}
 
     mode = 'PQR+FPD' if use_fpd else ('PQR' if use_pqr else 'plain')
     logger.debug(
         f"[PARSER] mode={mode}  table={table}  cols={columns}  "
-        f"conds={conditions}  like={like}  join={join}"
+        f"or_groups={or_groups}  like={like}  join={join}"
     )
 
     return {
         'raw':        original,
         'columns':    columns,
         'table':      table,
-        'conditions': conditions,
+        'or_groups':  or_groups,
+        'conditions': conditions,   # backward compat
         'like':       like,
         'join':       join,
         'use_pqr':    use_pqr,

@@ -1,4 +1,4 @@
-# GhostQL Query Language Reference — v1.0.0
+# GhostQL Query Language Reference — v1.1.0
 
 GhostQL speaks a familiar SQL-like dialect designed for unstructured, schema-free associative memory. There are no tables to create, no columns to define, no migrations to run. Tables appear when you query them. Gone when you don't.
 
@@ -10,7 +10,7 @@ GhostQL speaks a familiar SQL-like dialect designed for unstructured, schema-fre
 SELECT <columns>
 FROM   <table>
 [JOIN  <table2> ON <field>]
-WHERE  <condition>
+WHERE  <condition> [AND <condition> ...] [OR <condition> ...]
 [WITH  <flags>]
 ```
 
@@ -40,9 +40,55 @@ WHERE field='value' AND field2='value2'
 Each field name and value is treated as a search token. All tokens are searched independently and the result sets are ANDed — only documents matching **all** tokens are returned.
 
 ```sql
--- Four token searches, ANDed together
+-- Four token searches, ANDed together — pinpoints a single record
 WHERE name='Mills' AND nhs='4855805912'
--- tokens: ['name', 'Mills', 'nhs', '4855805912']
+```
+
+---
+
+## WHERE — OR
+
+```sql
+WHERE field='value' OR field='value2'
+```
+
+OR returns the **union** of both result sets — documents matching either condition.
+
+```sql
+-- Find all Mills OR all Chen patients
+WHERE name='Mills' OR name='Chen'
+
+-- Find records with diabetes OR patients on Metformin
+WHERE dlbl='Diabetes' OR mlbl='Metformin'
+```
+
+---
+
+## WHERE — Mixed AND/OR
+
+AND and OR can be combined. **AND binds tighter than OR** — matching MySQL standard precedence.
+
+```sql
+WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes'
+```
+
+Evaluates as:
+
+```
+(name='Mills' AND dlbl='Retinal') OR (dlbl='Diabetes')
+```
+
+Returns: all Mills patients with Retinal diagnosis, PLUS all Diabetes patients.
+
+```sql
+-- Two independent AND groups, unioned together
+WHERE name='Mills' AND dlbl='Retinal' OR name='Chen' AND dlbl='Diabetes'
+```
+
+Evaluates as:
+
+```
+(name='Mills' AND dlbl='Retinal') OR (name='Chen' AND dlbl='Diabetes')
 ```
 
 ---
@@ -57,17 +103,19 @@ The `LIKE` operator tokenises the free text, searches for each token, and scores
 
 ```sql
 SELECT document FROM records
-  WHERE notes LIKE 'Mills diabetes insulin pump annual review'
+  WHERE dlbl LIKE 'Retinal detachment'
   WITH PQR FPD
 ```
 
-The similarity threshold (default 40%) is set in `ghostql.conf`:
+The similarity threshold (default 30%) is set in `ghostql.conf`:
 ```ini
 [query]
-similarity_threshold = 0.4
+similarity_threshold = 0.3
 ```
 
 Result rows include `overlap_pct` — the percentage of query tokens matched.
+
+**Important:** `LIKE` returns the top N results by score, not all matches. Use exact `=` when you need guaranteed complete results. Use `LIKE` for discovery and relevance-ranked search.
 
 ---
 
@@ -75,14 +123,22 @@ Result rows include `overlap_pct` — the percentage of query tokens matched.
 
 ```sql
 SELECT document FROM patients
-  JOIN prescriptions ON nhs_number
+  JOIN clinical ON nhs
   WHERE name='Mills'
   WITH PQR FPD
 ```
 
-JOIN runs two independent result sets and returns the intersection — documents present in **both** the primary query results and the join-side token search. This is a content-addressed hash join: the ON field is a token that both document sets must contain.
+JOIN runs two independent result sets and returns documents from the join-side dataset whose shared field value (`nhs`) links them to records in the primary result set.
 
-V1.0.0 supports single JOIN only. Multi-table JOIN is on the roadmap.
+How it works:
+1. Execute the primary WHERE query against `patients` → get matching patient refs
+2. Extract the `nhs` field value from each matched patient record
+3. Search `clinical` for each NHS number
+4. Return matching clinical records
+
+V1.1.0 supports single JOIN only. Multi-table JOIN is on the roadmap.
+
+**Note:** JOIN requires the source JSONL file to be accessible locally for field value extraction. It works with the local connector out of the box. DMM-backed JOIN support requires `tqnn_get` retrieval — on the roadmap.
 
 ---
 
@@ -90,10 +146,10 @@ V1.0.0 supports single JOIN only. Multi-table JOIN is on the roadmap.
 
 Flags appear at the end of any query:
 
-| Flag      | Effect |
-|-----------|--------|
-| `PQR`     | Apply self-salting SHA-256 hashing to every token before searching. Required when the dataset was ingested with PQR enabled. |
-| `FPD`     | False Positive Defence. Each token is searched twice (forward hash + reversed-input hash). Only documents in **both** result sets are genuine. Requires `PQR`. |
+| Flag | Effect |
+|------|--------|
+| `PQR` | Apply self-salting SHA-256 hashing to every token before searching. Required when the dataset was ingested with PQR enabled. |
+| `FPD` | False Positive Defence. Each token is searched twice (forward hash + reversed-input hash). Only documents in **both** result sets are genuine. Requires `PQR`. |
 
 ```sql
 -- Plain text search (dataset must be plain-ingested)
@@ -130,32 +186,24 @@ Datasets ingested with the old constant-`*` padding scheme (V1.0.x) are incompat
 
 ---
 
-## Commands (interactive / TCP session)
-
-| Command   | Action |
-|-----------|--------|
-| `help` / `?` | Show syntax reference |
-| `ping`    | Test connector health |
-| `quit` / `exit` | Close connection |
-
----
-
 ## Result format
 
 Results are returned as a JSON array of objects:
 
 ```json
 [
-  { "document": "https://example.com/records/doc.json::line1::REC-001::fpd_abc" },
-  { "document": "https://example.com/records/doc.json::line2::REC-002::fpd_xyz" }
+  { "document": "records_0001.jsonl::line19::REC-00010019::fpd_518837c0" },
+  { "document": "records_0001.jsonl::line44::REC-00010044::fpd_3a7bc112" }
 ]
 ```
+
+Each `document` value is a filereference — a pointer to the source record. Your application uses these to fetch the actual content from the source file, API, or storage system. GhostQL finds the references; your app fetches the content.
 
 LIKE results include scoring:
 ```json
 [
-  { "document": "...", "token_hits": 4, "overlap_pct": 80.0 },
-  { "document": "...", "token_hits": 3, "overlap_pct": 60.0 }
+  { "document": "...", "token_hits": 2, "overlap_pct": 100.0 },
+  { "document": "...", "token_hits": 1, "overlap_pct": 50.0 }
 ]
 ```
 
@@ -163,9 +211,58 @@ No-match responses:
 ```json
 [{
   "status": "NO_MATCHES",
-  "message": "No documents matched all 4 token(s)",
+  "message": "No documents matched any of the 2 condition group(s)",
   "mode": "PQR+FPD",
-  "tokens": ["name", "Mills", "nhs", "4855805912"],
-  "search_summary": { "name": 12, "Mills": 8, "nhs": 5, "4855805912": 0 }
+  "or_groups": [{"name": "Mills"}, {"name": "Chen"}],
+  "search_summary": { "name": 0, "Mills": 50, "Chen": 32 }
 }]
 ```
+
+---
+
+## Commands (interactive / TCP session)
+
+| Command | Action |
+|---------|--------|
+| `help` / `?` | Show syntax reference |
+| `ping` | Test connector health |
+| `quit` / `exit` | Close connection |
+
+---
+
+## Complete examples
+
+```sql
+-- Exact match
+SELECT document FROM records WHERE name='Mills' WITH PQR FPD
+
+-- Pinpoint a single record
+SELECT document FROM records WHERE name='Mills' AND nhs='4855805912' WITH PQR FPD
+
+-- OR union
+SELECT document FROM records WHERE name='Mills' OR name='Chen' WITH PQR FPD
+
+-- OR across different fields
+SELECT document FROM records WHERE dlbl='Diabetes' OR mlbl='Metformin' WITH PQR FPD
+
+-- Mixed AND/OR (AND binds tighter)
+SELECT document FROM records WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes' WITH PQR FPD
+
+-- LIKE similarity search
+SELECT document FROM records WHERE dlbl LIKE 'Retinal detachment' WITH PQR FPD
+
+-- JOIN across two datasets
+SELECT document FROM patients JOIN clinical ON nhs WHERE name='Mills' WITH PQR FPD
+```
+
+---
+
+## Operator precedence summary
+
+| Operator | Precedence | Behaviour |
+|----------|-----------|-----------|
+| `AND` | High | Intersects result sets — all conditions must match |
+| `OR` | Low | Unions result sets — either condition can match |
+| `LIKE` | n/a | Similarity scoring — ranked by token overlap |
+
+AND always evaluates before OR. Use parentheses support (roadmap) to override.

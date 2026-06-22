@@ -1,0 +1,45 @@
+# ghostql.conf.example
+# Copy to ghostql.conf and fill in your values.
+# ghostql.conf is in .gitignore — never commit credentials.
+
+[server]
+host     = 0.0.0.0
+port     = 5051
+username = admin
+# Use a strong password — this is the GhostQL TCP interface credential
+password = changeme
+
+[connector]
+# The active data connector module (see ghostql/connectors/)
+# Built-in: dmm
+# Custom:   point to your own connector class (see docs/connectors.md)
+type = dmm
+
+[dmm]
+# Toridion DMM associative memory endpoint
+api_url    = https://tqnn.local/v1/document/search/searchDoc.php
+api_key    = YOUR_DMM_API_KEY
+api_secret = YOUR_DMM_API_SECRET
+dataset    = your_dataset_name
+# Set to false only for self-signed certs on a private network
+verify_ssl = true
+
+[local]
+# Local file connector — for demo and development (no DMM credentials needed)
+# Run demo/build_demo_index.py once to generate the index, then set type=local above
+index_path = demo/demo_index.json
+
+[query]
+# Default similarity threshold for LIKE queries (0.0 – 1.0)
+# 0.4 means a document must match at least 40% of query tokens
+similarity_threshold = 0.4
+# Maximum results returned per query
+max_results = 50
+# Timeout per API call in seconds
+api_timeout = 15
+
+[logging]
+# debug | info | warning | error
+level = info
+# Leave blank to log to stdout
+file  =

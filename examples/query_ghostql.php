@@ -34,7 +34,7 @@ stream_set_timeout($socket, 10);
 
 echo "\n";
 echo "╔══════════════════════════════════════════════════════╗\n";
-echo "║       GhostQL PHP Example Client v1.0.0             ║\n";
+echo "║        GhostQL PHP Example Client v1.0.0             ║\n";
 echo "╚══════════════════════════════════════════════════════╝\n\n";
 
 
@@ -133,7 +133,7 @@ function sendQuery(mixed $socket, string $query, int $timeout = 30): array {
 
 // 1. Read banner until "Username:" appears
 $banner = readUntilMarker($socket, 'Username:');
-echo trim($banner) . "\n\n";
+echo $banner . "\n\n";
 
 // 2. Send username, wait for "Password:" prompt
 sendLine($socket, $user);

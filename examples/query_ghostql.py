@@ -109,7 +109,7 @@ def send_query(sock: socket.socket, query: str, timeout: float = 30.0) -> list:
 
 def main():
     print("\n╔══════════════════════════════════════════╗")
-    print("║  GhostQL Python Example Client v1.0.0  ║")
+    print("║   GhostQL Python Example Client v1.0.0   ║")
     print("╚══════════════════════════════════════════╝")
 
     try:
@@ -122,7 +122,7 @@ def main():
     # ── Auth handshake — wait for each prompt before sending ─────────────────
     # 1. Read banner + "Username:" prompt
     banner = recv_until(sock, b'Username:')
-    print(banner.strip())
+    print(banner)
 
     # 2. Send username, wait for "Password:" prompt
     send_line(sock, USER)

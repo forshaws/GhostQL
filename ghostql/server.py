@@ -33,15 +33,13 @@ from .query.parser import ParseError
 logger = logging.getLogger(__name__)
 
 BANNER = r"""
-  ______  _               _    ____  _
- / ___| || |__   ___  ___| |_ / __ \| |
-| |  _| || '_ \ / _ \/ __| __/ / _` | |
-| |_| | || | | | (_) \__ \ |_| | (_| | |___
- \____|_||_| |_|\___/|___/\__\ \__,_|_____|
-  GhostQL v1.0.0 — Composable Sequential DB
-  https://github.com/toridion/ghostql
+   ____     ____  _               _    ___  _
+  /o  o\   / ___|| |__   ___  ___| |_ / _ \| |
+ |  ~~  | | |  _ | '_ \ / _ \/ __| __| | | | |
+ |  \/  | | |_| || | | | (_) \__ \ |_| |_| | |___
+ | /\/\ |  \____||_| |_|\___/|___/\__|\___\_\____|
+           v1.0.0 · Composable Sequential DB · MIT
 """
-
 HELP_TEXT = """
 GhostQL Query Language v1.0.0
 
@@ -77,7 +75,8 @@ def _send(conn: socket.socket, msg: str):
 def handle_client(conn: socket.socket, addr, config: GhostQLConfig, connector):
     logger.info(f"[CONNECT] {addr}")
     try:
-        _send(conn, BANNER.strip())
+        for line in BANNER.split('\n'):
+            _send(conn, line)
         _send(conn, "Username:")
 
         user = conn.recv(1024).decode('utf-8', errors='replace').strip()

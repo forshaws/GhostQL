@@ -24,3 +24,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+
+demo/records.jsonl
+demo/demo_index.json

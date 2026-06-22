@@ -10,7 +10,8 @@ from ..core.config import GhostQLConfig
 logger = logging.getLogger(__name__)
 
 _BUILTIN_CONNECTORS = {
-    'dmm': ('ghostql.connectors.dmm', 'DMMConnector'),
+    'dmm':   ('ghostql.connectors.dmm',   'DMMConnector'),
+    'local': ('ghostql.connectors.local', 'LocalFileConnector'),
 }
 
 

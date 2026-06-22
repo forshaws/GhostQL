@@ -24,6 +24,11 @@ dataset    = your_dataset_name
 # Set to false only for self-signed certs on a private network
 verify_ssl = true
 
+[local]
+# Local file connector — for demo and development (no DMM credentials needed)
+# Run demo/build_demo_index.py once to generate the index, then set type=local above
+index_path = demo/demo_index.json
+
 [query]
 # Default similarity threshold for LIKE queries (0.0 – 1.0)
 # 0.4 means a document must match at least 40% of query tokens

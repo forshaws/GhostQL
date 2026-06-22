@@ -16,7 +16,7 @@
   <p>
     <a href="https://github.com/toridion/ghostql/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"/></a>
-    <img src="https://img.shields.io/badge/version-1.0.0-brightgreen" alt="v1.0.0"/>
+    <img src="https://img.shields.io/badge/version-1.1.0-brightgreen" alt="v1.1.0"/>
     <img src="https://img.shields.io/badge/status-stable-brightgreen" alt="stable"/>
   </p>
 </div>

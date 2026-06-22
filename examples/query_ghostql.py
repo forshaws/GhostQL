@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
 examples/query_ghostql.py
-GhostQL Python Example Client v1.0.0
+GhostQL Python Example Client v1.1.0
+
+Demonstrates all GhostQL query types against a running GhostQL server.
+
+Prerequisites:
+  1. GhostQL server running: python -m ghostql.server
+  2. ghostql.conf configured with valid DMM credentials
 
 Usage:
   python examples/query_ghostql.py
@@ -20,32 +26,46 @@ USER = os.environ.get('GHOSTQL_USER', 'admin')
 PASS = os.environ.get('GHOSTQL_PASS', 'changeme')
 
 QUERIES = [
-    ("Plain SELECT (no hashing)",
-     "SELECT document FROM records WHERE name='Mills'"),
-
-    ("SELECT WITH PQR",
-     "SELECT document FROM records WHERE name='Mills' WITH PQR"),
-
-    ("SELECT WITH PQR FPD (correct mode for PQR-ingested data)",
-     "SELECT document FROM records WHERE name='Mills' WITH PQR FPD"),
-
-    ("Multi-condition AND WITH PQR FPD",
-     "SELECT document FROM records WHERE name='Mills' AND nhs='4855805912' WITH PQR FPD"),
-
-    ("LIKE similarity search WITH PQR FPD",
-     "SELECT document FROM records WHERE notes LIKE 'Mills pharmacy medication review' WITH PQR FPD"),
-
-    ("JOIN WITH PQR FPD",
-     "SELECT document FROM patients JOIN prescriptions ON nhs_number WHERE name='Mills' WITH PQR FPD"),
+    (
+        "Test 1 — Plain SELECT, no hashing (expected: NO_MATCHES on PQR-ingested data)",
+        "SELECT document FROM records WHERE name='Mills'"
+    ),
+    (
+        "Test 2 — SELECT WITH PQR — hashed tokens, no FPD",
+        "SELECT document FROM records WHERE name='Mills' WITH PQR"
+    ),
+    (
+        "Test 3 — SELECT WITH PQR FPD — correct mode for PQR+FPD-ingested data",
+        "SELECT document FROM records WHERE name='Mills' WITH PQR FPD"
+    ),
+    (
+        "Test 4 — AND — multi-condition intersection, pinpoint a single record",
+        "SELECT document FROM records WHERE name='Mills' AND nhs='4855805912' WITH PQR FPD"
+    ),
+    (
+        "Test 5 — LIKE — similarity search, ranked by token overlap",
+        "SELECT document FROM records WHERE dlbl LIKE 'Retinal detachment' WITH PQR FPD"
+    ),
+    (
+        "Test 6 — JOIN — cross-dataset join via shared field token",
+        "SELECT document FROM patients JOIN clinical ON nhs WHERE name='Mills' WITH PQR FPD"
+    ),
+    (
+        "Test 7 — OR — union of two name searches",
+        "SELECT document FROM records WHERE name='Mills' OR name='Chen' WITH PQR FPD"
+    ),
+    (
+        "Test 8 — OR — union across different fields",
+        "SELECT document FROM records WHERE dlbl='Diabetes' OR mlbl='Metformin' WITH PQR FPD"
+    ),
+    (
+        "Test 9 — Mixed AND/OR — AND binds tighter, (Mills AND Retinal) OR Diabetes",
+        "SELECT document FROM records WHERE name='Mills' AND dlbl='Retinal' OR dlbl='Diabetes' WITH PQR FPD"
+    ),
 ]
 
 
 def recv_until(sock: socket.socket, marker: bytes, timeout: float = 10.0) -> str:
-    """
-    Read from socket until `marker` appears in the buffer, or timeout.
-    Returns the full buffer as a string.
-    Uses a short inner timeout so we keep accumulating across multiple recv() calls.
-    """
     sock.settimeout(0.2)
     buf = b''
     deadline = time.time() + timeout
@@ -53,33 +73,32 @@ def recv_until(sock: socket.socket, marker: bytes, timeout: float = 10.0) -> str
         try:
             chunk = sock.recv(4096)
             if not chunk:
-                break          # server closed connection
+                break
             buf += chunk
             if marker in buf:
                 break
         except socket.timeout:
-            pass               # keep looping until deadline
+            pass
     return buf.decode('utf-8', errors='replace')
 
 
 def send_line(sock: socket.socket, text: str):
-    """Send a line (with newline) to the server."""
     sock.sendall((text + '\n').encode('utf-8'))
 
 
-def send_query(sock: socket.socket, query: str, timeout: float = 30.0) -> list:
-    print(f"\n┌─ {query}")
+def send_query(sock: socket.socket, label: str, query: str, timeout: float = 30.0) -> list:
+    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"  {label}")
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"┌─ {query}")
     send_line(sock, query)
-
-    # Wait for the prompt that follows the result
     raw = recv_until(sock, b'>', timeout)
 
-    # Extract JSON block
     for start_char in ('[', '{'):
         idx = raw.find(start_char)
         if idx != -1:
             end_char = ']' if start_char == '[' else '}'
-            end_idx = raw.rfind(end_char)
+            end_idx  = raw.rfind(end_char)
             if end_idx != -1:
                 try:
                     data = json.loads(raw[idx:end_idx + 1])
@@ -88,8 +107,7 @@ def send_query(sock: socket.socket, query: str, timeout: float = 30.0) -> list:
 
                     if data and data[0].get('status') in ('NO_MATCHES', 'NO_TOKENS'):
                         print(f"└─ ⚠  {data[0].get('message', 'No matches')}")
-                        summary = data[0].get('search_summary', {})
-                        for token, count in summary.items():
+                        for token, count in data[0].get('search_summary', {}).items():
                             print(f"       '{token}' → {count} hit(s)")
                     else:
                         print(f"└─ ✓  {len(data)} result(s)")
@@ -109,7 +127,7 @@ def send_query(sock: socket.socket, query: str, timeout: float = 30.0) -> list:
 
 def main():
     print("\n╔══════════════════════════════════════════╗")
-    print("║   GhostQL Python Example Client v1.0.0   ║")
+    print("║   GhostQL Python Example Client v1.1.0   ║")
     print("╚══════════════════════════════════════════╝")
 
     try:
@@ -119,17 +137,14 @@ def main():
         print("  Is the server running?  python -m ghostql.server")
         return
 
-    # ── Auth handshake — wait for each prompt before sending ─────────────────
-    # 1. Read banner + "Username:" prompt
+    # Auth
     banner = recv_until(sock, b'Username:')
     print(banner)
 
-    # 2. Send username, wait for "Password:" prompt
     send_line(sock, USER)
     recv_until(sock, b'Password:')
     print("Password:")
 
-    # 3. Send password, wait for auth result prompt ">"
     send_line(sock, PASS)
     auth = recv_until(sock, b'>')
     print(auth.strip())
@@ -142,16 +157,14 @@ def main():
         sock.close()
         return
 
-    # ── Ping ──────────────────────────────────────────────────────────────────
+    # Ping
     print("\n── Ping ─────────────────────────────────────")
     send_line(sock, 'ping')
     print(recv_until(sock, b'>').strip())
 
-    # ── Queries ───────────────────────────────────────────────────────────────
-    print("\n── Queries ──────────────────────────────────")
+    # Queries
     for label, query in QUERIES:
-        print(f"\n  [{label}]")
-        send_query(sock, query)
+        send_query(sock, label, query, timeout=60.0)
 
     send_line(sock, 'quit')
     sock.close()
